@@ -73,105 +73,17 @@ class _RegisterScreenState extends State<RegisterScreen> {
       }
 
       if (success && mounted) {
-        // MENSAGEM DE SUCESSO
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Row(
-              children: [
-                const Icon(Icons.check_circle, color: Colors.white),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Text(
-                        'Conta criada com sucesso!',
-                        style: TextStyle(
-                          fontWeight: FontWeight.bold,
-                          fontSize: 16,
-                        ),
-                      ),
-                      Text(
-                        'Bem-vindo(a), ${_nameController.text.trim()}!',
-                        style: const TextStyle(fontSize: 14),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-            backgroundColor: Colors.green,
-            duration: const Duration(seconds: 3),
-            behavior: SnackBarBehavior.floating,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(10),
-            ),
-            margin: const EdgeInsets.all(20),
-          ),
+        // APENAS REDIRECIONAR - Dashboard mostrará a mensagem
+        Navigator.pushReplacementNamed(
+          context,
+          '/dashboard',
+          arguments: {
+            'isNewUser': true,
+            'userName': _nameController.text.trim()
+          },
         );
-
-        // Aguardar um pouco para mostrar a mensagem
-        await Future.delayed(const Duration(seconds: 1));
-
-        if (mounted) {
-          // MOSTRAR DIALOG DE BOAS-VINDAS
-          await showDialog(
-            context: context,
-            barrierDismissible: false,
-            builder: (context) => AlertDialog(
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(20),
-              ),
-              title: const Row(
-                children: [
-                  Icon(Icons.celebration, color: Colors.amber, size: 30),
-                  SizedBox(width: 10),
-                  Text('Bem-vindo(a)!'),
-                ],
-              ),
-              content: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'Olá ${_nameController.text.trim()}!',
-                    style: const TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  const Text(
-                    'Sua conta foi criada com sucesso. Vamos começar adicionando suas crianças para organizar as tarefas!',
-                    style: TextStyle(fontSize: 14),
-                  ),
-                ],
-              ),
-              actions: [
-                ElevatedButton.icon(
-                  onPressed: () {
-                    Navigator.pop(context);
-                    Navigator.pushReplacementNamed(context, '/dashboard');
-                  },
-                  icon: const Icon(Icons.arrow_forward),
-                  label: const Text('Vamos começar!'),
-                  style: ElevatedButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 20,
-                      vertical: 12,
-                    ),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          );
-        }
       } else if (!success && mounted) {
-        // MENSAGEM DE ERRO
+        // Mensagem de erro
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Row(
@@ -181,27 +93,11 @@ class _RegisterScreenState extends State<RegisterScreen> {
                 Expanded(
                   child: Text(
                     authProvider.errorMessage ?? 'Erro ao criar conta',
-                    style: const TextStyle(fontSize: 15),
                   ),
                 ),
               ],
             ),
             backgroundColor: Colors.red,
-            duration: const Duration(seconds: 4),
-            behavior: SnackBarBehavior.floating,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(10),
-            ),
-            margin: const EdgeInsets.all(20),
-            action: SnackBarAction(
-              label: 'Tentar novamente',
-              textColor: Colors.white,
-              onPressed: () {
-                // Limpar apenas a senha
-                _passwordController.clear();
-                _confirmPasswordController.clear();
-              },
-            ),
           ),
         );
       }
@@ -411,12 +307,21 @@ class _RegisterScreenState extends State<RegisterScreen> {
                 const SizedBox(height: 32),
 
                 // Botão Cadastrar
-                SizedBox(
-                  height: 56,
-                  child: ElevatedButton(
-                    onPressed: _handleRegister,
-                    child: const Text('Criar Conta'),
-                  ),
+                Consumer<AuthProvider>(
+                  builder: (context, authProvider, _) {
+                    return SizedBox(
+                      height: 56,
+                      child: ElevatedButton(
+                        onPressed:
+                            authProvider.isLoading ? null : _handleRegister,
+                        child: authProvider.isLoading
+                            ? const CircularProgressIndicator(
+                                color: Colors.white,
+                              )
+                            : const Text('Criar Conta'),
+                      ),
+                    );
+                  },
                 ).animate().fadeIn(delay: 800.ms).scale(
                       begin: const Offset(0.9, 0.9),
                       end: const Offset(1, 1),

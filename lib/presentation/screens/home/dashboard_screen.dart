@@ -1,10 +1,10 @@
 // lib/presentation/screens/home/dashboard_screen.dart
 
 import 'package:flutter/material.dart';
-import 'package:flutter/foundation.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:provider/provider.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../../core/providers/auth_provider.dart';
 
@@ -25,6 +25,118 @@ class _DashboardScreenState extends State<DashboardScreen> {
   void initState() {
     super.initState();
     _loadData();
+    // Verificar se deve mostrar boas-vindas
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _checkAndShowWelcome();
+    });
+  }
+
+  // Método para verificar e mostrar boas-vindas
+  Future<void> _checkAndShowWelcome() async {
+    // Verificar se é novo usuário através dos argumentos de navegação
+    final args =
+        ModalRoute.of(context)?.settings.arguments as Map<String, dynamic>?;
+
+    // Verificar também se é a primeira vez usando SharedPreferences
+    final prefs = await SharedPreferences.getInstance();
+    final hasSeenWelcome =
+        prefs.getBool('hasSeenWelcome_${_supabase.auth.currentUser?.id}') ??
+            false;
+
+    if ((args != null && args['isNewUser'] == true) || !hasSeenWelcome) {
+      final userName = args?['userName'] ??
+          _supabase.auth.currentUser?.userMetadata?['name'] ??
+          _supabase.auth.currentUser?.email?.split('@')[0] ??
+          'Usuário';
+
+      // Marcar que já viu o welcome
+      await prefs.setBool(
+          'hasSeenWelcome_${_supabase.auth.currentUser?.id}', true);
+
+      // Mostrar SnackBar de sucesso
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Row(
+              children: [
+                const Icon(Icons.check_circle, color: Colors.white),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    args?['isNewUser'] == true
+                        ? 'Conta criada com sucesso! Bem-vindo(a), $userName!'
+                        : 'Bem-vindo(a) de volta, $userName!',
+                    style: const TextStyle(fontSize: 15),
+                  ),
+                ),
+              ],
+            ),
+            backgroundColor: Colors.green,
+            duration: const Duration(seconds: 4),
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(10),
+            ),
+          ),
+        );
+      }
+
+      // Se é completamente novo (sem crianças), mostrar dialog tutorial
+      if (args?['isNewUser'] == true) {
+        await Future.delayed(const Duration(seconds: 2));
+
+        if (mounted && _children.isEmpty) {
+          showDialog(
+            context: context,
+            barrierDismissible: false,
+            builder: (context) => AlertDialog(
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(20),
+              ),
+              title: const Row(
+                children: [
+                  Icon(Icons.celebration, color: Colors.amber, size: 30),
+                  SizedBox(width: 10),
+                  Text('Vamos começar!'),
+                ],
+              ),
+              content: const Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Para começar a usar o app:',
+                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                  ),
+                  SizedBox(height: 12),
+                  Text('1️⃣ Adicione suas crianças'),
+                  SizedBox(height: 8),
+                  Text('2️⃣ Crie tarefas personalizadas'),
+                  SizedBox(height: 8),
+                  Text('3️⃣ Defina pontos e recompensas'),
+                  SizedBox(height: 8),
+                  Text('4️⃣ Acompanhe o progresso!'),
+                ],
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: const Text('Depois'),
+                ),
+                ElevatedButton.icon(
+                  onPressed: () {
+                    Navigator.pop(context);
+                    _showAddChildDialog();
+                  },
+                  icon: const Icon(Icons.add),
+                  label: const Text('Adicionar criança'),
+                ),
+              ],
+            ),
+          );
+        }
+      }
+    }
   }
 
   Future<void> _loadData() async {
@@ -32,7 +144,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
       final userId = _supabase.auth.currentUser?.id;
 
       if (userId != null) {
-        // Carregar crianças
         final childrenResponse = await _supabase
             .from('children')
             .select('*')
@@ -66,35 +177,35 @@ class _DashboardScreenState extends State<DashboardScreen> {
               child: _buildHeader(authProvider),
             ),
 
-            // Resumo Rápido
-            SliverToBoxAdapter(
-              child: _buildQuickSummary(),
-            ),
+            // Resumo Rápido (só mostra se tem crianças)
+            if (_children.isNotEmpty)
+              SliverToBoxAdapter(
+                child: _buildQuickSummary(),
+              ),
 
             // Título da seção
-            SliverToBoxAdapter(
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(24, 24, 24, 16),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Text(
-                      'Minhas Crianças',
-                      style: Theme.of(context).textTheme.headlineSmall,
-                    ).animate().fadeIn(delay: 400.ms),
-                    if (_children.isEmpty)
-                      Container()
-                    else
+            if (!_isLoading)
+              SliverToBoxAdapter(
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(24, 24, 24, 16),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
                       Text(
-                        '${_children.length} ${_children.length == 1 ? 'criança' : 'crianças'}',
-                        style: Theme.of(context).textTheme.bodyMedium,
-                      ).animate().fadeIn(delay: 500.ms),
-                  ],
+                        'Minhas Crianças',
+                        style: Theme.of(context).textTheme.headlineSmall,
+                      ).animate().fadeIn(delay: 400.ms),
+                      if (_children.isNotEmpty)
+                        Text(
+                          '${_children.length} ${_children.length == 1 ? 'criança' : 'crianças'}',
+                          style: Theme.of(context).textTheme.bodyMedium,
+                        ).animate().fadeIn(delay: 500.ms),
+                    ],
+                  ),
                 ),
               ),
-            ),
 
-            // Lista de crianças ou estado vazio
+            // Conteúdo principal
             if (_isLoading)
               const SliverFillRemaining(
                 child: Center(
@@ -118,15 +229,22 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   ),
                 ),
               ),
+
+            // Espaçamento no final para o FAB não cobrir conteúdo
+            const SliverToBoxAdapter(
+              child: SizedBox(height: 80),
+            ),
           ],
         ),
       ),
 
-      // Botão flutuante para adicionar criança
+      // Botão flutuante único
       floatingActionButton: FloatingActionButton.extended(
         onPressed: _showAddChildDialog,
         icon: const Icon(Icons.add),
-        label: const Text('Adicionar Criança'),
+        label: Text(_children.isEmpty
+            ? 'Adicionar Primeira Criança'
+            : 'Adicionar Criança'),
         backgroundColor: Theme.of(context).primaryColor,
       ).animate().fadeIn(delay: 600.ms).scale(
             begin: const Offset(0.8, 0.8),
@@ -164,7 +282,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 ).animate().fadeIn(duration: 600.ms),
                 const SizedBox(height: 4),
                 Text(
-                  'Vamos organizar as tarefas de hoje?',
+                  _children.isEmpty
+                      ? 'Adicione suas crianças para começar!'
+                      : 'Vamos organizar as tarefas de hoje?',
                   style: Theme.of(context).textTheme.bodyMedium,
                 ).animate().fadeIn(delay: 200.ms),
               ],
@@ -189,7 +309,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
             ),
             onSelected: (value) async {
               if (value == 'settings') {
-                // Navegar para configurações
                 ScaffoldMessenger.of(context).showSnackBar(
                   const SnackBar(content: Text('Configurações em breve!')),
                 );
@@ -385,7 +504,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   IconButton(
                     icon: const Icon(Icons.more_vert, color: Colors.white),
                     onPressed: () {
-                      // Implementar menu de opções
+                      _showChildOptionsMenu(child);
                     },
                   ),
                 ],
@@ -430,7 +549,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   Expanded(
                     child: ElevatedButton.icon(
                       onPressed: () {
-                        // Implementar marcar tarefa
                         ScaffoldMessenger.of(context).showSnackBar(
                           const SnackBar(
                             content: Text('Função de tarefas em breve!'),
@@ -453,7 +571,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     ),
                     child: IconButton(
                       onPressed: () {
-                        // Implementar ver histórico
                         ScaffoldMessenger.of(context).showSnackBar(
                           const SnackBar(
                             content: Text('Histórico em breve!'),
@@ -503,6 +620,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
+  // EMPTY STATE SEM BOTÃO DUPLICADO
   Widget _buildEmptyState() {
     return Center(
       child: Padding(
@@ -527,32 +645,23 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   end: const Offset(1, 1),
                   curve: Curves.easeOutBack,
                 ),
+
             const SizedBox(height: 24),
+
             Text(
               'Nenhuma criança cadastrada',
               style: Theme.of(context).textTheme.headlineSmall,
             ).animate().fadeIn(delay: 200.ms),
+
             const SizedBox(height: 12),
+
             Text(
-              'Adicione sua primeira criança para começar a organizar as tarefas!',
+              'Clique no botão abaixo para adicionar sua primeira criança e começar a organizar as tarefas!',
               textAlign: TextAlign.center,
               style: Theme.of(context).textTheme.bodyMedium,
             ).animate().fadeIn(delay: 300.ms),
-            const SizedBox(height: 32),
-            ElevatedButton.icon(
-              onPressed: _showAddChildDialog,
-              icon: const Icon(Icons.add),
-              label: const Text('Adicionar Primeira Criança'),
-              style: ElevatedButton.styleFrom(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 24,
-                  vertical: 16,
-                ),
-              ),
-            ).animate().fadeIn(delay: 400.ms).scale(
-                  begin: const Offset(0.9, 0.9),
-                  end: const Offset(1, 1),
-                ),
+
+            // SEM BOTÃO AQUI - só o FAB
           ],
         ),
       ),
@@ -570,6 +679,91 @@ class _DashboardScreenState extends State<DashboardScreen> {
     };
 
     return colorMap[colorName] ?? colorMap['purple']!;
+  }
+
+  void _showChildOptionsMenu(Map<String, dynamic> child) {
+    showModalBottomSheet(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (context) => Container(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const Icon(Icons.edit),
+              title: const Text('Editar'),
+              onTap: () {
+                Navigator.pop(context);
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Edição em breve!')),
+                );
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.delete, color: Colors.red),
+              title: const Text('Remover', style: TextStyle(color: Colors.red)),
+              onTap: () {
+                Navigator.pop(context);
+                _confirmDeleteChild(child);
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _confirmDeleteChild(Map<String, dynamic> child) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Remover criança?'),
+        content: Text(
+            'Deseja remover ${child['name']}? Esta ação não pode ser desfeita.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancelar'),
+          ),
+          ElevatedButton(
+            onPressed: () async {
+              Navigator.pop(context);
+              await _deleteChild(child['id']);
+            },
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+            child: const Text('Remover'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _deleteChild(String childId) async {
+    try {
+      await _supabase.from('children').delete().eq('id', childId);
+      _loadData();
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Criança removida'),
+            backgroundColor: Colors.orange,
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Erro ao remover'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
   }
 
   void _showAddChildDialog() {
@@ -653,26 +847,27 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       'level': 1,
                     });
 
-                    if (context.mounted) {
-                      Navigator.pop(dialogContext);
-                      _loadData(); // Recarregar dados
+                    if (!mounted) return;
 
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
-                          content: Text('Criança adicionada com sucesso!'),
-                          backgroundColor: Colors.green,
-                        ),
-                      );
-                    }
+                    // Se o código chegou até aqui, significa que a tela AINDA EXISTE.
+                    // Agora você pode executar suas ações com segurança.
+                    Navigator.pop(context);
+                    _loadData();
+
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text('Criança adicionada com sucesso!'),
+                        backgroundColor: Colors.green,
+                      ),
+                    );
                   } catch (e) {
-                    if (context.mounted) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(
-                          content: Text('Erro ao adicionar criança: $e'),
-                          backgroundColor: Colors.red,
-                        ),
-                      );
-                    }
+                    if (!mounted) return;
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text('Erro ao adicionar: $e'),
+                        backgroundColor: Colors.red,
+                      ),
+                    );
                   }
                 }
               },

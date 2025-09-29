@@ -54,7 +54,7 @@ class _SplashScreenState extends State<SplashScreen> {
                 borderRadius: BorderRadius.circular(30),
                 boxShadow: [
                   BoxShadow(
-                    color: Colors.black.withOpacity(0.1),
+                    color: Colors.black.withAlpha(10),
                     blurRadius: 30,
                     offset: const Offset(0, 10),
                   ),
@@ -86,7 +86,7 @@ class _SplashScreenState extends State<SplashScreen> {
             Text(
               'Tornando tarefas divertidas!',
               style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                    color: Colors.white.withOpacity(0.9),
+                    color: Colors.white.withAlpha(90),
                   ),
             ).animate().fadeIn(delay: 500.ms, duration: 600.ms),
             const SizedBox(height: 48),

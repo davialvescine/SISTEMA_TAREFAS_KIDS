@@ -24,7 +24,7 @@ dependencies:
   lottie: ^3.0.0
   
   # Storage
-  shared_preferences: ^2.2.2
+  shared_preferences: ^2.5.3
   
   # Utils
   intl: ^0.18.1

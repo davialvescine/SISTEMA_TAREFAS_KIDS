@@ -2,6 +2,7 @@
 
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'dart:developer';
 
 class AuthProvider extends ChangeNotifier {
   final _supabase = Supabase.instance.client;
@@ -98,7 +99,10 @@ class AuthProvider extends ChangeNotifier {
         } catch (dbError) {
           // Se falhar ao criar na tabela users, fazer login automático
           // pois o usuário já foi criado no Auth
-          print('Aviso: Erro ao criar perfil na tabela users: $dbError');
+          log('Falha ao criar perfil na tabela users. Tentando login automático.',
+              error: dbError,
+              name: 'AuthProvider' // 'name' opcional ajuda a organizar
+              );
 
           // Tentar fazer login automático
           final loginResult = await signInWithEmail(
@@ -119,7 +123,8 @@ class AuthProvider extends ChangeNotifier {
                   .select()
                   .single();
             } catch (e) {
-              print('Aviso: Perfil será criado no próximo login');
+              log('Perfil do usuário será criado no próximo login',
+                  name: 'AuthProvider');
             }
           }
 
@@ -197,7 +202,7 @@ class AuthProvider extends ChangeNotifier {
               .single();
         }
       } catch (e) {
-        print('Erro ao verificar/criar perfil: $e');
+        log('Erro ao verificar/criar perfil: $e', name: 'AuthProvider');
       }
     }
   }

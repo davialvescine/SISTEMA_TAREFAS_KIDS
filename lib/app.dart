@@ -6,6 +6,7 @@ import 'presentation/screens/auth/login_screen.dart';
 import 'presentation/screens/auth/register_screen.dart';
 import 'presentation/screens/home/dashboard_screen.dart';
 import 'presentation/screens/splash/splash_screen.dart';
+import 'package:sistema_tarefas_kids/presentation/screens/auth/forgot_password_screen.dart';
 
 class MyApp extends StatelessWidget {
   final bool isFirstTime;
@@ -22,6 +23,7 @@ class MyApp extends StatelessWidget {
       routes: {
         '/': (context) => SplashScreen(isFirstTime: isFirstTime),
         '/onboarding': (context) => const OnboardingScreen(),
+        '/forgot-password': (context) => const ForgotPasswordScreen(),
         '/login': (context) => const LoginScreen(),
         '/register': (context) => const RegisterScreen(),
         '/dashboard': (context) => const DashboardScreen(),
