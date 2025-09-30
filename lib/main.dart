@@ -3,9 +3,10 @@ import 'package:flutter/services.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-
+import 'core/providers/task_provider.dart';
 import 'app.dart';
 import 'core/providers/auth_provider.dart';
+import 'core/providers/child_provider.dart';
 import 'core/constants/supabase_constants.dart';
 
 void main() async {
@@ -39,8 +40,11 @@ void main() async {
     MultiProvider(
       providers: [
         ChangeNotifierProvider(create: (_) => AuthProvider()),
+        ChangeNotifierProvider(create: (_) => ChildProvider()),
+        ChangeNotifierProvider(create: (_) => TaskProvider()),
       ],
       child: MyApp(isFirstTime: isFirstTime),
     ),
   );
 }
+// lib/main.dart

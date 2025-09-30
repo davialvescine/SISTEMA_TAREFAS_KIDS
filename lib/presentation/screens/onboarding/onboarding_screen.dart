@@ -171,7 +171,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
             width: 120,
             height: 120,
             decoration: BoxDecoration(
-              color: page.color.withOpacity(0.1),
+              color: page.color.withAlpha(100),
               shape: BoxShape.circle,
             ),
             child: Icon(
@@ -180,9 +180,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
               color: page.color,
             ),
           ).animate().fadeIn(duration: 600.ms).scale(
-                begin: const Offset(0.5, 0.5),
-                end: const Offset(1, 1),
-                curve: Curves.easeOutBack,
+              // ...
               ),
           const SizedBox(height: 48),
           Text(

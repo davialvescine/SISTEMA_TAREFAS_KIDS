@@ -74,8 +74,7 @@ class _LoginScreenState extends State<LoginScreen> {
                         borderRadius: BorderRadius.circular(25),
                         boxShadow: [
                           BoxShadow(
-                            color:
-                                Theme.of(context).primaryColor.withOpacity(0.3),
+                            color: Theme.of(context).primaryColor.withAlpha(30),
                             blurRadius: 20,
                             offset: const Offset(0, 10),
                           ),
@@ -170,16 +169,13 @@ class _LoginScreenState extends State<LoginScreen> {
 
                 const SizedBox(height: 12),
 
-                // Esqueceu a senha
-                Align(
-                  alignment: Alignment.centerRight,
-                  child: TextButton(
-                    onPressed: () {
-                      _showForgotPasswordDialog();
-                    },
-                    child: const Text('Esqueceu a senha?'),
-                  ),
-                ).animate().fadeIn(delay: 600.ms),
+                // Substitua o botão "Esqueceu a senha?" por:
+                TextButton(
+                  onPressed: () {
+                    Navigator.pushNamed(context, '/forgot-password');
+                  },
+                  child: const Text('Esqueceu a senha?'),
+                ).animate().fadeIn(delay: 500.ms),
 
                 const SizedBox(height: 24),
 
@@ -246,7 +242,7 @@ class _LoginScreenState extends State<LoginScreen> {
     );
   }
 
-  void _showForgotPasswordDialog() {
+  /*void _showForgotPasswordDialog() {
     final emailController = TextEditingController();
 
     showDialog(
@@ -317,5 +313,5 @@ class _LoginScreenState extends State<LoginScreen> {
         ],
       ),
     );
-  }
+  }*/
 }
