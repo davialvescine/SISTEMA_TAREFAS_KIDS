@@ -7,6 +7,10 @@ import 'presentation/screens/auth/register_screen.dart';
 import 'presentation/screens/home/dashboard_screen.dart';
 import 'presentation/screens/splash/splash_screen.dart';
 import 'package:sistema_tarefas_kids/presentation/screens/auth/forgot_password_screen.dart';
+import 'presentation/screens/tasks/tasks_list_screen.dart';
+import 'presentation/screens/tasks/task_form_screen.dart';
+import 'presentation/screens/tasks/mark_task_screen.dart';
+import 'presentation/screens/child/child_profile_screen.dart';
 
 class MyApp extends StatelessWidget {
   final bool isFirstTime;
@@ -16,19 +20,22 @@ class MyApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Tarefas Kids',
-      debugShowCheckedModeBanner: false,
-      theme: _buildTheme(),
-      initialRoute: '/',
-      routes: {
-        '/': (context) => SplashScreen(isFirstTime: isFirstTime),
-        '/onboarding': (context) => const OnboardingScreen(),
-        '/forgot-password': (context) => const ForgotPasswordScreen(),
-        '/login': (context) => const LoginScreen(),
-        '/register': (context) => const RegisterScreen(),
-        '/dashboard': (context) => const DashboardScreen(),
-      },
-    );
+        title: 'Tarefas Kids',
+        debugShowCheckedModeBanner: false,
+        theme: _buildTheme(),
+        initialRoute: '/',
+        routes: {
+          '/': (context) => SplashScreen(isFirstTime: isFirstTime),
+          '/onboarding': (context) => const OnboardingScreen(),
+          '/login': (context) => const LoginScreen(),
+          '/register': (context) => const RegisterScreen(),
+          '/dashboard': (context) => const DashboardScreen(),
+          '/forgot-password': (context) => const ForgotPasswordScreen(),
+          '/tasks': (context) => const TasksListScreen(),
+          '/task-form': (context) => const TaskFormScreen(),
+          '/mark-task': (context) => const MarkTaskScreen(),
+          '/child-profile': (context) => const ChildProfileScreen(),
+        });
   }
 
   ThemeData _buildTheme() {

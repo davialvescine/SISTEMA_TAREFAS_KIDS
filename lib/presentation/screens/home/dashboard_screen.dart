@@ -5,8 +5,9 @@ import 'package:flutter_animate/flutter_animate.dart';
 import 'package:provider/provider.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-
 import '../../../core/providers/auth_provider.dart';
+import '../../../core/providers/child_provider.dart';
+import '../../../core/models/child_model.dart';
 
 class DashboardScreen extends StatefulWidget {
   const DashboardScreen({super.key});
@@ -18,15 +19,12 @@ class DashboardScreen extends StatefulWidget {
 class _DashboardScreenState extends State<DashboardScreen> {
   final _supabase = Supabase.instance.client;
 
-  List<Map<String, dynamic>> _children = [];
-  bool _isLoading = true;
-
   @override
   void initState() {
     super.initState();
-    _loadData();
-    // Verificar se deve mostrar boas-vindas
+    // Carregar dados através do provider
     WidgetsBinding.instance.addPostFrameCallback((_) {
+      context.read<ChildProvider>().loadChildren();
       _checkAndShowWelcome();
     });
   }
@@ -85,7 +83,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
       if (args?['isNewUser'] == true) {
         await Future.delayed(const Duration(seconds: 2));
 
-        if (mounted && _children.isEmpty) {
+        if (!mounted) return;
+
+        final childProvider = context.read<ChildProvider>();
+        if (childProvider.children.isEmpty) {
           showDialog(
             context: context,
             barrierDismissible: false,
@@ -139,33 +140,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
     }
   }
 
-  Future<void> _loadData() async {
-    try {
-      final userId = _supabase.auth.currentUser?.id;
-
-      if (userId != null) {
-        final childrenResponse = await _supabase
-            .from('children')
-            .select('*')
-            .eq('user_id', userId)
-            .order('created_at', ascending: false);
-
-        setState(() {
-          _children = List<Map<String, dynamic>>.from(childrenResponse);
-          _isLoading = false;
-        });
-      }
-    } catch (e) {
-      debugPrint('Erro ao carregar dados: $e');
-      setState(() {
-        _isLoading = false;
-      });
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
     final authProvider = context.read<AuthProvider>();
+    final childProvider = context.watch<ChildProvider>();
 
     return Scaffold(
       backgroundColor: Theme.of(context).scaffoldBackgroundColor,
@@ -178,13 +156,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
             ),
 
             // Resumo Rápido (só mostra se tem crianças)
-            if (_children.isNotEmpty)
+            if (childProvider.children.isNotEmpty)
               SliverToBoxAdapter(
-                child: _buildQuickSummary(),
+                child: _buildQuickSummary(childProvider),
               ),
 
             // Título da seção
-            if (!_isLoading)
+            if (!childProvider.isLoading)
               SliverToBoxAdapter(
                 child: Padding(
                   padding: const EdgeInsets.fromLTRB(24, 24, 24, 16),
@@ -195,9 +173,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         'Minhas Crianças',
                         style: Theme.of(context).textTheme.headlineSmall,
                       ).animate().fadeIn(delay: 400.ms),
-                      if (_children.isNotEmpty)
+                      if (childProvider.children.isNotEmpty)
                         Text(
-                          '${_children.length} ${_children.length == 1 ? 'criança' : 'crianças'}',
+                          '${childProvider.children.length} ${childProvider.children.length == 1 ? 'criança' : 'crianças'}',
                           style: Theme.of(context).textTheme.bodyMedium,
                         ).animate().fadeIn(delay: 500.ms),
                     ],
@@ -206,13 +184,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
               ),
 
             // Conteúdo principal
-            if (_isLoading)
+            if (childProvider.isLoading)
               const SliverFillRemaining(
                 child: Center(
                   child: CircularProgressIndicator(),
                 ),
               )
-            else if (_children.isEmpty)
+            else if (childProvider.children.isEmpty)
               SliverFillRemaining(
                 hasScrollBody: false,
                 child: _buildEmptyState(),
@@ -223,14 +201,14 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 sliver: SliverList(
                   delegate: SliverChildBuilderDelegate(
                     (context, index) {
-                      return _buildChildCard(_children[index], index);
+                      return _buildChildCard(childProvider.children[index], index);
                     },
-                    childCount: _children.length,
+                    childCount: childProvider.children.length,
                   ),
                 ),
               ),
 
-            // Espaçamento no final para o FAB não cobrir conteúdo
+            // Espaçamento para o FAB
             const SliverToBoxAdapter(
               child: SizedBox(height: 80),
             ),
@@ -242,7 +220,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
       floatingActionButton: FloatingActionButton.extended(
         onPressed: _showAddChildDialog,
         icon: const Icon(Icons.add),
-        label: Text(_children.isEmpty
+        label: Text(childProvider.children.isEmpty
             ? 'Adicionar Primeira Criança'
             : 'Adicionar Criança'),
         backgroundColor: Theme.of(context).primaryColor,
@@ -282,7 +260,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 ).animate().fadeIn(duration: 600.ms),
                 const SizedBox(height: 4),
                 Text(
-                  _children.isEmpty
+                  context.watch<ChildProvider>().children.isEmpty
                       ? 'Adicione suas crianças para começar!'
                       : 'Vamos organizar as tarefas de hoje?',
                   style: Theme.of(context).textTheme.bodyMedium,
@@ -342,22 +320,57 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 ),
               ),
             ],
-          ).animate().fadeIn(delay: 300.ms),
+          ),
         ],
       ),
     );
   }
 
-  Widget _buildQuickSummary() {
-    final totalPoints = _children.fold<int>(
-      0,
-      (sum, child) => sum + (child['current_points'] as int? ?? 0),
+  Widget _buildEmptyState() {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(32),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Container(
+              padding: const EdgeInsets.all(32),
+              decoration: BoxDecoration(
+                color: Theme.of(context).primaryColor.withValues(alpha: 0.1),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(
+                Icons.child_care,
+                size: 80,
+                color: Theme.of(context).primaryColor,
+              ),
+            ).animate().scale(
+                  begin: const Offset(0.5, 0.5),
+                  end: const Offset(1, 1),
+                  duration: 500.ms,
+                ),
+            const SizedBox(height: 24),
+            Text(
+              'Nenhuma criança cadastrada',
+              style: Theme.of(context).textTheme.headlineSmall,
+              textAlign: TextAlign.center,
+            ).animate().fadeIn(delay: 200.ms),
+            const SizedBox(height: 12),
+            Text(
+              'Adicione suas crianças para começar a organizar as tarefas e acompanhar o progresso delas!',
+              style: Theme.of(context).textTheme.bodyMedium,
+              textAlign: TextAlign.center,
+            ).animate().fadeIn(delay: 300.ms),
+          ],
+        ),
+      ),
     );
+  }
 
-    final totalStars = _children.fold<int>(
-      0,
-      (sum, child) => sum + (child['stars'] as int? ?? 0),
-    );
+  Widget _buildQuickSummary(ChildProvider childProvider) {
+    final totalPoints = childProvider.totalFamilyPoints;
+    final totalStars = childProvider.totalFamilyStars;
+    final totalMoney = childProvider.totalFamilyMoney;
 
     return Container(
       margin: const EdgeInsets.all(24),
@@ -390,6 +403,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
             color: Colors.white.withValues(alpha: 0.3),
           ),
           _buildSummaryItem('⭐', totalStars.toString(), 'Estrelas Totais'),
+          Container(
+            width: 1,
+            height: 50,
+            color: Colors.white.withValues(alpha: 0.3),
+          ),
+          _buildSummaryItem('💰', 'R\$ ${totalMoney.toStringAsFixed(2)}', 'Reais Totais'),
         ],
       ),
     ).animate().fadeIn(delay: 300.ms).slideY(
@@ -411,7 +430,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
           value,
           style: const TextStyle(
             color: Colors.white,
-            fontSize: 24,
+            fontSize: 20,
             fontWeight: FontWeight.bold,
           ),
         ),
@@ -419,15 +438,15 @@ class _DashboardScreenState extends State<DashboardScreen> {
           label,
           style: TextStyle(
             color: Colors.white.withValues(alpha: 0.9),
-            fontSize: 12,
+            fontSize: 11,
           ),
         ),
       ],
     );
   }
 
-  Widget _buildChildCard(Map<String, dynamic> child, int index) {
-    final colors = _getGradientColors(child['color'] ?? 'purple');
+  Widget _buildChildCard(ChildModel child, int index) {
+    final colors = _getGradientColors(child.color);
 
     return Container(
       margin: const EdgeInsets.only(bottom: 16),
@@ -464,7 +483,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     ),
                     child: Center(
                       child: Text(
-                        child['name']?.substring(0, 1).toUpperCase() ?? '?',
+                        child.name.isNotEmpty ? child.name.substring(0, 1).toUpperCase() : '?',
                         style: TextStyle(
                           fontSize: 24,
                           fontWeight: FontWeight.bold,
@@ -482,7 +501,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          child['name'] ?? 'Sem nome',
+                          child.name,
                           style: const TextStyle(
                             color: Colors.white,
                             fontSize: 20,
@@ -490,7 +509,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                           ),
                         ),
                         Text(
-                          'Nível ${child['level'] ?? 1}',
+                          'Nível ${child.level}',
                           style: TextStyle(
                             color: Colors.white.withValues(alpha: 0.9),
                             fontSize: 14,
@@ -524,17 +543,17 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   children: [
                     _buildStatItem(
                       '🎯',
-                      '${child['current_points'] ?? 0}',
+                      '${child.currentPoints}',
                       'Pontos',
                     ),
                     _buildStatItem(
                       '⭐',
-                      '${child['stars'] ?? 0}',
+                      '${child.stars}',
                       'Estrelas',
                     ),
                     _buildStatItem(
                       '💰',
-                      'R\$ ${(child['real_money'] ?? 0.0).toStringAsFixed(2)}',
+                      'R\$ ${child.realMoney.toStringAsFixed(2)}',
                       'Reais',
                     ),
                   ],
@@ -549,10 +568,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   Expanded(
                     child: ElevatedButton.icon(
                       onPressed: () {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(
-                            content: Text('Função de tarefas em breve!'),
-                          ),
+                        Navigator.pushNamed(
+                          context,
+                          '/mark-task',
+                          arguments: {'child': child},
                         );
                       },
                       icon: const Icon(Icons.add_task),
@@ -571,10 +590,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     ),
                     child: IconButton(
                       onPressed: () {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(
-                            content: Text('Histórico em breve!'),
-                          ),
+                        Navigator.pushNamed(
+                          context,
+                          '/child-profile',
+                          arguments: {'child': child},
                         );
                       },
                       icon: Icon(Icons.history, color: colors[0]),
@@ -599,20 +618,23 @@ class _DashboardScreenState extends State<DashboardScreen> {
   Widget _buildStatItem(String emoji, String value, String label) {
     return Column(
       children: [
-        Text(emoji, style: const TextStyle(fontSize: 20)),
+        Text(
+          emoji,
+          style: const TextStyle(fontSize: 20),
+        ),
         const SizedBox(height: 4),
         Text(
           value,
           style: const TextStyle(
             color: Colors.white,
-            fontSize: 16,
+            fontSize: 18,
             fontWeight: FontWeight.bold,
           ),
         ),
         Text(
           label,
           style: TextStyle(
-            color: Colors.white.withValues(alpha: 0.8),
+            color: Colors.white.withValues(alpha: 0.9),
             fontSize: 11,
           ),
         ),
@@ -620,75 +642,27 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
-  // EMPTY STATE SEM BOTÃO DUPLICADO
-  Widget _buildEmptyState() {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(32),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Container(
-              width: 120,
-              height: 120,
-              decoration: BoxDecoration(
-                color: Theme.of(context).primaryColor.withValues(alpha: 0.1),
-                shape: BoxShape.circle,
-              ),
-              child: Icon(
-                Icons.child_care,
-                size: 60,
-                color: Theme.of(context).primaryColor,
-              ),
-            ).animate().fadeIn().scale(
-                  begin: const Offset(0.8, 0.8),
-                  end: const Offset(1, 1),
-                  curve: Curves.easeOutBack,
-                ),
-
-            const SizedBox(height: 24),
-
-            Text(
-              'Nenhuma criança cadastrada',
-              style: Theme.of(context).textTheme.headlineSmall,
-            ).animate().fadeIn(delay: 200.ms),
-
-            const SizedBox(height: 12),
-
-            Text(
-              'Clique no botão abaixo para adicionar sua primeira criança e começar a organizar as tarefas!',
-              textAlign: TextAlign.center,
-              style: Theme.of(context).textTheme.bodyMedium,
-            ).animate().fadeIn(delay: 300.ms),
-
-            // SEM BOTÃO AQUI - só o FAB
-          ],
-        ),
-      ),
-    );
-  }
-
   List<Color> _getGradientColors(String colorName) {
     final colorMap = {
-      'purple': [const Color(0xFF8B5CF6), const Color(0xFFA855F7)],
-      'blue': [const Color(0xFF3B82F6), const Color(0xFF60A5FA)],
-      'green': [const Color(0xFF10B981), const Color(0xFF34D399)],
-      'orange': [const Color(0xFFF59E0B), const Color(0xFFFBBF24)],
-      'pink': [const Color(0xFFEC4899), const Color(0xFFF472B6)],
-      'red': [const Color(0xFFEF4444), const Color(0xFFF87171)],
+      'purple': [const Color(0xFF8B5CF6), const Color(0xFF7C3AED)],
+      'blue': [const Color(0xFF3B82F6), const Color(0xFF2563EB)],
+      'green': [const Color(0xFF10B981), const Color(0xFF059669)],
+      'orange': [const Color(0xFFF97316), const Color(0xFFEA580C)],
+      'pink': [const Color(0xFFEC4899), const Color(0xFFDB2777)],
+      'red': [const Color(0xFFEF4444), const Color(0xFFDC2626)],
     };
 
     return colorMap[colorName] ?? colorMap['purple']!;
   }
 
-  void _showChildOptionsMenu(Map<String, dynamic> child) {
+  void _showChildOptionsMenu(ChildModel child) {
     showModalBottomSheet(
       context: context,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
       builder: (context) => Container(
-        padding: const EdgeInsets.all(20),
+        padding: const EdgeInsets.symmetric(vertical: 20),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -697,9 +671,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
               title: const Text('Editar'),
               onTap: () {
                 Navigator.pop(context);
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Edição em breve!')),
-                );
+                _showEditChildDialog(child);
               },
             ),
             ListTile(
@@ -716,13 +688,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
-  void _confirmDeleteChild(Map<String, dynamic> child) {
+  void _confirmDeleteChild(ChildModel child) {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('Remover criança?'),
         content: Text(
-            'Deseja remover ${child['name']}? Esta ação não pode ser desfeita.'),
+            'Deseja remover ${child.name}? Esta ação não pode ser desfeita.'),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
@@ -731,7 +703,22 @@ class _DashboardScreenState extends State<DashboardScreen> {
           ElevatedButton(
             onPressed: () async {
               Navigator.pop(context);
-              await _deleteChild(child['id']);
+
+              if (!mounted) return;
+
+              final childProvider = context.read<ChildProvider>();
+              final success = await childProvider.deleteChild(child.id);
+
+              if (!mounted) return;
+
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text(success
+                      ? 'Criança removida com sucesso!'
+                      : 'Erro ao remover criança'),
+                  backgroundColor: success ? Colors.green : Colors.red,
+                ),
+              );
             },
             style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
             child: const Text('Remover'),
@@ -741,40 +728,15 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
-  Future<void> _deleteChild(String childId) async {
-    try {
-      await _supabase.from('children').delete().eq('id', childId);
-      _loadData();
-
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Criança removida'),
-            backgroundColor: Colors.orange,
-          ),
-        );
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Erro ao remover'),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
-    }
-  }
-
-  void _showAddChildDialog() {
-    final nameController = TextEditingController();
-    String selectedColor = 'purple';
+  void _showEditChildDialog(ChildModel child) {
+    final nameController = TextEditingController(text: child.name);
+    String selectedColor = child.color;
 
     showDialog(
       context: context,
       builder: (dialogContext) => StatefulBuilder(
         builder: (dialogContext, setState) => AlertDialog(
-          title: const Text('Adicionar Criança'),
+          title: const Text('Editar Criança'),
           content: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
@@ -782,7 +744,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 controller: nameController,
                 decoration: const InputDecoration(
                   labelText: 'Nome da criança',
-                  hintText: 'Ex: João',
                 ),
                 textCapitalization: TextCapitalization.words,
               ),
@@ -832,46 +793,243 @@ class _DashboardScreenState extends State<DashboardScreen> {
             ),
             ElevatedButton(
               onPressed: () async {
-                if (nameController.text.isNotEmpty) {
-                  try {
-                    final userId = _supabase.auth.currentUser?.id;
+                if (nameController.text.trim().isNotEmpty) {
+                  Navigator.pop(dialogContext);
 
-                    await _supabase.from('children').insert({
-                      'user_id': userId,
-                      'name': nameController.text.trim(),
-                      'color': selectedColor,
-                      'current_points': 0,
-                      'total_points': 0,
-                      'stars': 0,
-                      'real_money': 0.0,
-                      'level': 1,
-                    });
+                  final childProvider = context.read<ChildProvider>();
+                  final success = await childProvider.updateChild(
+                    childId: child.id,
+                    name: nameController.text.trim(),
+                    color: selectedColor,
+                  );
 
-                    if (!mounted) return;
-
-                    // Se o código chegou até aqui, significa que a tela AINDA EXISTE.
-                    // Agora você pode executar suas ações com segurança.
-                    Navigator.pop(context);
-                    _loadData();
-
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                        content: Text('Criança adicionada com sucesso!'),
-                        backgroundColor: Colors.green,
-                      ),
-                    );
-                  } catch (e) {
-                    if (!mounted) return;
+                  if (mounted) {
                     ScaffoldMessenger.of(context).showSnackBar(
                       SnackBar(
-                        content: Text('Erro ao adicionar: $e'),
-                        backgroundColor: Colors.red,
+                        content: Text(success
+                            ? 'Criança atualizada com sucesso!'
+                            : 'Erro ao atualizar criança'),
+                        backgroundColor: success ? Colors.green : Colors.red,
                       ),
                     );
                   }
                 }
               },
-              child: const Text('Adicionar'),
+              child: const Text('Salvar'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showAddChildDialog() {
+    final nameController = TextEditingController();
+    String selectedColor = 'purple';
+    DateTime? birthDate;
+
+    showDialog(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (dialogContext, setState) => AlertDialog(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20),
+          ),
+          title: const Row(
+            children: [
+              Icon(Icons.child_care, color: Colors.purple),
+              SizedBox(width: 12),
+              Text('Adicionar Criança'),
+            ],
+          ),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                TextField(
+                  controller: nameController,
+                  decoration: InputDecoration(
+                    labelText: 'Nome da criança',
+                    hintText: 'Ex: João',
+                    prefixIcon: const Icon(Icons.person),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                  textCapitalization: TextCapitalization.words,
+                ),
+                const SizedBox(height: 20),
+
+                // Data de nascimento (opcional)
+                InkWell(
+                  onTap: () async {
+                    final picked = await showDatePicker(
+                      context: context,
+                      initialDate: DateTime.now().subtract(const Duration(days: 365 * 5)),
+                      firstDate: DateTime.now().subtract(const Duration(days: 365 * 18)),
+                      lastDate: DateTime.now(),
+                    );
+                    if (picked != null) {
+                      setState(() {
+                        birthDate = picked;
+                      });
+                    }
+                  },
+                  child: Container(
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      border: Border.all(color: Colors.grey),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Row(
+                      children: [
+                        const Icon(Icons.cake, color: Colors.grey),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Text(
+                            birthDate != null
+                                ? '${birthDate!.day}/${birthDate!.month}/${birthDate!.year}'
+                                : 'Data de nascimento (opcional)',
+                            style: TextStyle(
+                              color: birthDate != null ? Colors.black : Colors.grey,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+
+                const SizedBox(height: 20),
+                const Text('Escolha uma cor:', style: TextStyle(fontWeight: FontWeight.bold)),
+                const SizedBox(height: 12),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    'purple',
+                    'blue',
+                    'green',
+                    'orange',
+                    'pink',
+                    'red',
+                  ].map((color) {
+                    final colors = _getGradientColors(color);
+                    return GestureDetector(
+                      onTap: () {
+                        setState(() {
+                          selectedColor = color;
+                        });
+                      },
+                      child: Container(
+                        width: 45,
+                        height: 45,
+                        decoration: BoxDecoration(
+                          gradient: LinearGradient(colors: colors),
+                          shape: BoxShape.circle,
+                          border: Border.all(
+                            color: selectedColor == color
+                                ? Colors.black
+                                : Colors.transparent,
+                            width: 3,
+                          ),
+                        ),
+                        child: selectedColor == color
+                            ? const Icon(Icons.check, color: Colors.white, size: 20)
+                            : null,
+                      ),
+                    );
+                  }).toList(),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext),
+              child: const Text('Cancelar'),
+            ),
+            ElevatedButton.icon(
+              onPressed: () async {
+                // Valida se o campo de nome não está vazio
+                if (nameController.text.trim().isEmpty) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('Por favor, insira o nome da criança'),
+                      backgroundColor: Colors.orange,
+                    ),
+                  );
+                  return;
+                }
+
+                // Usar o provider para adicionar a criança
+                final childProvider = context.read<ChildProvider>();
+                Navigator.pop(dialogContext); // Fecha o diálogo primeiro
+
+                // Mostra loading
+                showDialog(
+                  context: context,
+                  barrierDismissible: false,
+                  builder: (context) => const Center(
+                    child: CircularProgressIndicator(),
+                  ),
+                );
+
+                // Adiciona a criança
+                final success = await childProvider.addChild(
+                  name: nameController.text.trim(),
+                  color: selectedColor,
+                  birthDate: birthDate,
+                );
+
+                // Fecha o loading
+                if (mounted) Navigator.pop(context);
+
+                // Mostra resultado
+                if (mounted) {
+                  if (success) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Row(
+                          children: [
+                            const Icon(Icons.check_circle, color: Colors.white),
+                            const SizedBox(width: 12),
+                            Text('${nameController.text} foi adicionado(a) com sucesso!'),
+                          ],
+                        ),
+                        backgroundColor: Colors.green,
+                        behavior: SnackBarBehavior.floating,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                      ),
+                    );
+                  } else {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Row(
+                          children: [
+                            const Icon(Icons.error, color: Colors.white),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Text(childProvider.errorMessage ??
+                                  'Erro ao adicionar criança'),
+                            ),
+                          ],
+                        ),
+                        backgroundColor: Colors.red,
+                        behavior: SnackBarBehavior.floating,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                      ),
+                    );
+                  }
+                }
+              },
+              icon: const Icon(Icons.add),
+              label: const Text('Adicionar'),
             ),
           ],
         ),
